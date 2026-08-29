@@ -1,0 +1,13 @@
+# 构建产物
+build/
+release/*.apk
+release/*.idsig
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# 系统
+.DS_Store
+Thumbs.db

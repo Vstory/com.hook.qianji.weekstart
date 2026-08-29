@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    android:versionCode="17"
+    android:versionName="1.0.15"
+    package="com.hook.qianji.weekstart">
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
+    <application android:label="钱迹强制周一" android:allowBackup="false">
+        <meta-data android:name="xposedmodule" android:value="true" />
+        <meta-data android:name="xposedminversion" android:value="93" />
+        <meta-data android:name="xposeddescription" android:value="强制钱迹记账每周第一天为周一(三重MMKV拦截)" />
+        <meta-data android:name="xposedscope" android:value="com.mutangtech.qianji" />
+    </application>
+</manifest>
