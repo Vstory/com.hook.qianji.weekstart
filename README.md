@@ -19,7 +19,7 @@
 |------|------|------|
 | v1.0.15 (17) | `QianjiForceMonday_v1.0.15(17).apk` | 日志精简版（当前最新） |
 
-### 🔑 签名策略（FAQ：别人没有我的签名 / 没有 MT Manager 怎么办？）
+### 🔑 签名策略
 
 1. **想自己构建使用** → 直接 `./build.sh`，脚本自动生成 **debug keystore（CN=Android Debug）** 签名，
    不需要 MT Manager、不需要任何证书，clone 下来即可构建安装。
