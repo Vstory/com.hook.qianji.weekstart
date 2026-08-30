@@ -1,173 +1,136 @@
 #!/bin/bash
-#
-# 钱迹强制周一 LSPosed 模块构建脚本
-# v1.0.15(17) - 三重 hook (getWeekStart / qe.c.c / va.d.getInt) + 日志精简
-#
+# ============================================================
+# 钱迹强制周一 LSPosed 模块 - api102 构建脚本
+# v1.1.0 - 基于 io.github.libxposed.api (libxposed API 102)
+# ============================================================
 # 依赖: aapt, smali, zipalign, apksigner, keytool
 # 用法:
-#   ./build.sh                     # 默认使用自动生成的 debug 签名 (开箱即用)
-#   ./build.sh -k my.keystore      # 使用自定义 keystore 签名 (发布者)
+#   ./build.sh                     # patch: versionCode+1, versionName 不变
+#   ./build.sh minor               # minor: 次版本+1, code+1
+#   ./build.sh major               # major: 主版本+1, code+1
+#   ./build.sh -k my.keystore patch   # 自定义 keystore 签名
 #
 # 环境变量 (或 -k/-a 参数):
-#   KEYSTORE_FILE    keystore 路径
-#   KEYSTORE_ALIAS   别名 (默认 androiddebugkey)
-#   KEYSTORE_STORE_PASS  store 密码 (默认 android)
-#   KEYSTORE_KEY_PASS      key 密码   (默认 android)
+#   KEYSTORE_FILE / KEYSTORE_ALIAS / KEYSTORE_STORE_PASS / KEYSTORE_KEY_PASS
 #
-# 产出: release/QianjiForceMonday_v1.0.15(17).apk
-#
-# 签名策略说明:
-#   - 默认 debug 签名 (CN=Android Debug): 任何人 clone 后无需任何证书即可构建安装
+# 签名策略:
+#   - 默认 debug 签名 (CN=Android Debug): 任何人 clone 后无需证书即可构建安装
 #   - 自定义 keystore: 发布者用自己的私钥签名, 私钥永不公开
-#   - 注意: debug 签名版与发布版(不同签名)无法互相覆盖安装, 升级需先卸载或保持同一签名
-#
-
+# ============================================================
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-BUILD_DIR="build"
-RELEASE_DIR="release"
-SRC_DIR="src"
-RES_DIR="res"
+MODULE_NAME="QianjiForceMonday"
+AAPT="/usr/bin/aapt"
+ANDROID_JAR="/workspace/tools/android-sdk/platforms/android-34/android.jar"
+if [ ! -f "$ANDROID_JAR" ]; then
+    ANDROID_JAR="/usr/lib/android-sdk/platforms/android-23/android.jar"
+fi
+ZIPALIGN="/usr/bin/zipalign"
+APKSIGNER="/usr/bin/apksigner"
+SMALI="/usr/bin/smali"
 
-PACKAGE_NAME="com.hook.qianji.weekstart"
-VERSION_NAME="1.0.15"
-VERSION_CODE=17
-OUTPUT_NAME="QianjiForceMonday_v${VERSION_NAME}(${VERSION_CODE}).apk"
-
-# ========== 解析参数 ==========
+# ---------- 解析参数 ----------
 CUSTOM_KEYSTORE=""
+BUMP="patch"
 while [ $# -gt 0 ]; do
     case "$1" in
-        -k|--keystore)
-            CUSTOM_KEYSTORE="$2"; shift 2 ;;
-        -a|--alias)
-            KEYSTORE_ALIAS="$2"; shift 2 ;;
-        *)
-            echo "未知参数: $1"; exit 1 ;;
+        -k|--keystore) CUSTOM_KEYSTORE="$2"; shift 2 ;;
+        -a|--alias)    KEYSTORE_ALIAS="$2"; shift 2 ;;
+        patch|minor|major) BUMP="$1"; shift ;;
+        *) echo "未知参数: $1 (支持 patch|minor|major 和 -k keystore)"; exit 1 ;;
     esac
 done
 
-# ========== 签名配置 (默认 debug) ==========
+# ---------- 签名配置 (默认 debug) ----------
 KEYSTORE_FILE="${KEYSTORE_FILE:-$CUSTOM_KEYSTORE}"
 KEYSTORE_ALIAS="${KEYSTORE_ALIAS:-androiddebugkey}"
 KEYSTORE_STORE_PASS="${KEYSTORE_STORE_PASS:-android}"
 KEYSTORE_KEY_PASS="${KEYSTORE_KEY_PASS:-android}"
 
-# 查找 android.jar
-ANDROID_JAR="/workspace/tools/android-sdk/platforms/android-34/android.jar"
-if [ ! -f "$ANDROID_JAR" ]; then
-    ANDROID_JAR="/usr/lib/android-sdk/platforms/android-23/android.jar"
+# ---------- 版本管理 ----------
+VERSION_FILE="version.properties"
+if [ ! -f "$VERSION_FILE" ]; then
+    printf 'versionName=1.1.0\nversionCode=18\n' > "$VERSION_FILE"
 fi
-echo "使用 android.jar: $ANDROID_JAR"
+VERSION_NAME=$(grep '^versionName=' "$VERSION_FILE" | cut -d= -f2)
+VERSION_CODE=$(grep '^versionCode=' "$VERSION_FILE" | cut -d= -f2)
 
-# ========== 1. 清理 ==========
-echo "[1/7] 清理构建目录..."
-rm -rf "$BUILD_DIR"
-mkdir -p "$BUILD_DIR" "$RELEASE_DIR"
+case "$BUMP" in
+    patch) VERSION_CODE=$((VERSION_CODE + 1)) ;;
+    minor) VERSION_NAME=$(echo "$VERSION_NAME" | awk -F. '{print $1"."$2+1".0"}'); VERSION_CODE=$((VERSION_CODE + 1)) ;;
+    major) VERSION_NAME=$(echo "$VERSION_NAME" | awk -F. '{print $1+1".0.0"}'); VERSION_CODE=$((VERSION_CODE + 1)) ;;
+esac
+printf 'versionName=%s\nversionCode=%s\n' "$VERSION_NAME" "$VERSION_CODE" > "$VERSION_FILE"
+OUT="release/${MODULE_NAME}_${VERSION_NAME}(${VERSION_CODE}).apk"
+echo "构建版本: ${VERSION_NAME}(${VERSION_CODE})"
 
-# ========== 2. 编译资源 ==========
-echo "[2/7] 编译资源..."
-TEMP_MANIFEST="$BUILD_DIR/AndroidManifest.xml"
-cat > "$TEMP_MANIFEST" << EOF
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="$PACKAGE_NAME"
-    android:versionCode="$VERSION_CODE"
-    android:versionName="$VERSION_NAME">
-    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
-    <application android:label="钱迹强制周一">
-        <meta-data android:name="xposeddescription" android:value="强制钱迹记账每周第一天为周一(三重MMKV拦截)" />
-        <meta-data android:name="xposedmodule" android:value="true" />
-        <meta-data android:name="xposedminversion" android:value="93" />
-        <meta-data android:name="xposedscope" android:value="com.mutangtech.qianji" />
-    </application>
-</manifest>
-EOF
+# ---------- 写回 Manifest 版本号 ----------
+sed -i "s/android:versionCode=\"[0-9]*\"/android:versionCode=\"$VERSION_CODE\"/; s/android:versionName=\"[^\"]*\"/android:versionName=\"$VERSION_NAME\"/" AndroidManifest.xml
 
-# 编译资源生成 R.java (可选，模块无Java代码引用资源时不需要)
-mkdir -p "$BUILD_DIR/gen"
-aapt package -f -m \
-    -J "$BUILD_DIR/gen" \
-    -M "$TEMP_MANIFEST" \
-    -S "$RES_DIR" \
-    -I "$ANDROID_JAR" \
-    --non-constant-id 2>/dev/null || echo "      (R.java 生成跳过/失败, 继续)"
+# ---------- 编译 ----------
+echo "[1/5] smali 编译..."
+rm -rf build
+mkdir -p build/dex
+"$SMALI" assemble src/smali -o build/dex/classes.dex
 
-# ========== 3. 编译 Smali ==========
-echo "[3/7] 编译 Smali → classes.dex..."
-smali assemble "$SRC_DIR/smali" -o "$BUILD_DIR/classes.dex"
-DEX_SIZE=$(wc -c < "$BUILD_DIR/classes.dex")
-echo "      classes.dex: ${DEX_SIZE} bytes"
+echo "[2/5] aapt 编译资源(生成二进制AXML)..."
+mkdir -p build/clean
+"$AAPT" package -f -M AndroidManifest.xml -S res \
+    -I "$ANDROID_JAR" -F build/base.apk
+cd build/clean
+unzip -o ../base.apk
+# api102 模块配置: META-INF/xposed/{java_init.list, module.prop, scope.list}
+cp -r ../../src/meta-inf/META-INF .
+cp ../dex/classes.dex .
+rm -rf META-INF/*.SF META-INF/*.RSA META-INF/*.MF 2>/dev/null || true
+cd ../..
 
-# ========== 4. 打包 APK ==========
-echo "[4/7] 打包未签名 APK..."
-cd "$SCRIPT_DIR"
+# ---------- 打包（resources.arsc 必须未压缩+对齐）----------
+echo "[3/5] 打包 (resources.arsc store 模式)..."
+rm -f "$OUT" release/tmp_unsigned.apk release/aligned.apk
+cd build/clean
+zip -r ../../release/tmp_unsigned.apk \
+    AndroidManifest.xml resources.arsc classes.dex \
+    META-INF/xposed/java_init.list META-INF/xposed/module.prop META-INF/xposed/scope.list
+# resources.arsc 重压为未压缩(store)
+zip -d ../../release/tmp_unsigned.apk resources.arsc
+zip -0 ../../release/tmp_unsigned.apk resources.arsc
+cd ../..
 
-aapt package -f \
-    -M "$SCRIPT_DIR/$BUILD_DIR/AndroidManifest.xml" \
-    -S "$SCRIPT_DIR/$RES_DIR" \
-    -A "$SCRIPT_DIR/src/assets" \
-    -I "$ANDROID_JAR" \
-    -F "$SCRIPT_DIR/$RELEASE_DIR/${OUTPUT_NAME}.unsigned.apk"
+echo "[4/5] zipalign 对齐..."
+"$ZIPALIGN" -f 4 release/tmp_unsigned.apk release/aligned.apk
 
-# 添加 classes.dex 到 APK (需在包含classes.dex的目录执行)
-cd "$BUILD_DIR"
-aapt add "$SCRIPT_DIR/$RELEASE_DIR/${OUTPUT_NAME}.unsigned.apk" classes.dex
-
-cd "$SCRIPT_DIR"
-
-# ========== 5. Zipalign ==========
-echo "[5/7] Zipalign 对齐..."
-mv "$RELEASE_DIR/${OUTPUT_NAME}.unsigned.apk" "$BUILD_DIR/unsigned.apk"
-zipalign -f 4 "$BUILD_DIR/unsigned.apk" "$BUILD_DIR/aligned.apk"
-
-# ========== 6. 准备 keystore ==========
-echo "[6/7] 准备签名证书..."
+echo "[5/5] apksigner 签名..."
 if [ -n "$KEYSTORE_FILE" ] && [ -f "$KEYSTORE_FILE" ]; then
     echo "      使用自定义 keystore: $KEYSTORE_FILE (alias=$KEYSTORE_ALIAS)"
 else
-    # 默认 debug keystore: 首次自动生成, 之后复用
-    KEYSTORE_FILE="$BUILD_DIR/debug.keystore"
+    KEYSTORE_FILE="build/debug.keystore"
     if [ ! -f "$KEYSTORE_FILE" ]; then
         echo "      生成 debug keystore (CN=Android Debug)..."
-        keytool -genkeypair -v \
-            -keystore "$KEYSTORE_FILE" \
-            -alias androiddebugkey \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -storepass android \
-            -keypass android \
-            -dname "CN=Android Debug,O=Android,C=US" >/dev/null 2>&1
+        keytool -genkeypair -v -keystore "$KEYSTORE_FILE" -storepass android \
+            -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 \
+            -validity 10000 -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null
     fi
     echo "      使用 debug keystore: $KEYSTORE_FILE"
 fi
+"$APKSIGNER" sign --ks "$KEYSTORE_FILE" --ks-pass pass:"$KEYSTORE_STORE_PASS" \
+    --key-pass pass:"$KEYSTORE_KEY_PASS" --ks-key-alias "$KEYSTORE_ALIAS" \
+    --out "$OUT" release/aligned.apk
 
-# ========== 7. 签名 ==========
-echo "[7/7] 签名 APK..."
-apksigner sign \
-    --ks "$KEYSTORE_FILE" \
-    --ks-key-alias "$KEYSTORE_ALIAS" \
-    --ks-pass pass:"$KEYSTORE_STORE_PASS" \
-    --key-pass pass:"$KEYSTORE_KEY_PASS" \
-    --out "$RELEASE_DIR/$OUTPUT_NAME" \
-    "$BUILD_DIR/aligned.apk"
-
+rm -f release/tmp_unsigned.apk release/aligned.apk
 echo ""
-echo "构建完成!"
-echo "APK: $RELEASE_DIR/$OUTPUT_NAME"
+echo "✅ 完成: $OUT"
 echo ""
 echo "签名信息:"
-apksigner verify --print-certs "$RELEASE_DIR/$OUTPUT_NAME" 2>/dev/null | grep -E "Signer #1 certificate DN|Signer #1 certificate SHA-256" || true
+"$APKSIGNER" verify --print-certs "$OUT" 2>/dev/null | grep -E "Signer #1 certificate DN|Signer #1 certificate SHA-256" || true
 echo ""
 echo "安装步骤:"
 echo "1. 将 APK 复制到手机"
-echo "2. 在 LSPosed 管理器中启用/更新模块"
-echo "3. 勾选钱迹记账作为作用域"
-echo "4. 强制停止并重新打开钱迹记账"
+echo "2. 在 LSPosed 管理器中启用/更新模块 (作用域自动=钱迹记账)"
+echo "3. 强制停止并重新打开钱迹记账"
 echo ""
 echo "提示: 若手机已安装官方 Release 版(不同签名), 直接安装本 APK 会提示签名冲突;"
 echo "      请先卸载旧版再安装, 或使用与官方相同的 keystore 重新构建 (-k 参数)。"

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 模块描述（LSPosed 管理器模块列表显示；android:description 必须引用资源，不能写字面量） -->
+    <string name="module_description">强制钱迹记账（com.mutangtech.qianji）每周起始日为周一，锁定设置不反弹</string>
+</resources>

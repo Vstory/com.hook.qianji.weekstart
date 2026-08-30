@@ -2,6 +2,9 @@
 build/
 release/*.apk
 release/*.idsig
+release/*.unsigned.apk
+release/aligned.apk
+release/tmp_unsigned.apk
 
 # IDE
 .idea/

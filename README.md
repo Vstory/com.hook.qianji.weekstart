@@ -1,14 +1,17 @@
 # 钱迹强制周一 (Qianji Force Monday)
 
-> LSPosed 模块 —— 强制钱迹记账（com.mutangtech.qianji）每周第一天为**周一**
-> 状态：✅ **已成功**（用户实测打开钱迹即周一）
+> **libxposed API 102** LSPosed 模块 —— 强制钱迹记账（com.mutangtech.qianji）每周第一天为**周一**
+> 状态：✅ **已成功**（用户实测打开钱迹即周一）；v1.1.0 已重构为 api102 架构
 
-## 🎯 解决的问题
+## 🎯 解锁内容
 
-**钱迹记账** 在一加手机（以及其他设备）上有个烦人的 bug：设置里允许用户选择"每周起始日：周一 / 周六 / 周日"，
-**但选择永远固定不住**——设置了周一，过段时间/重新打开又变回周日，烦不胜烦。
+钱迹记账的"每周起始日"设置选择**永远固定不住**（设置了周一，过段时间/重新打开又变回周日），官方多次反馈未修复。
 
-官方多次反馈未修复，于是自己动手，用 LSPosed Hook 强制锁定周一。
+本模块强制锁定每周第一天为**周一**：
+- ✅ 日历页周一起始（读取链三重 hook，强制返回周一）
+- ✅ 不拦截写入、不修改账单数据库，完全可逆（停用/卸载模块后恢复原始行为）
+
+> 注：强制周一后，设置界面中的"周六/周日"选项将不生效（预期行为）。
 
 ## 📦 下载 / 构建产物
 
@@ -17,9 +20,10 @@
 
 | 版本 | 文件 | 说明 |
 |------|------|------|
-| v1.0.15 (17) | `QianjiForceMonday_v1.0.15(17).apk` | 日志精简版（当前最新） |
+| v1.1.0 (20) | `QianjiForceMonday_1.1.0(20).apk` | **api102 重构版**（最新，含模块描述；release/ 内置） |
+| v1.0.15 (17) | `QianjiForceMonday_v1.0.15(17).apk` | 传统 Xposed API 版（旧，仅 GitHub Releases；源码备份于 dev-guide/legacy-traditional-api/） |
 
-### 🔑 签名策略
+### 🔑 签名策略（FAQ：别人没有我的签名 / 没有 MT Manager 怎么办？）
 
 1. **想自己构建使用** → 直接 `./build.sh`，脚本自动生成 **debug keystore（CN=Android Debug）** 签名，
    不需要 MT Manager、不需要任何证书，clone 下来即可构建安装。
@@ -32,59 +36,32 @@
 > 官方 Release 版（MT/自定义签名）与本地 debug 构建版 **签名不同，无法互相覆盖安装**；
 > 如需无缝升级，请始终使用同一 keystore，或直接卸载重装。
 
-## 🧠 原理
-
-### week 值语义（关键！）
-钱迹使用 **java.util.Calendar 标准**：
-- `1` = 周日
-- `2` = 周一  ← 我们要强制返回的值
-- `7` = 周六
-
-### 读取链
-```
-getWeekStart()                          → L1 hook（直接返回 2）
-  └─ c("week", 2)                       → L2 hook（key=week 返回 2）
-       ├─ 已登录: va/c.l("apiconfu_week")  → va/d.getInt
-       └─ 未登录: va/c.g("week")            → va/d.getInt
-                                            → L3 hook（key=week/apiconfu_week 返回 2）
-```
-
-### 三重 Hook
-| 层 | 目标 | 方法 | 逻辑 |
-|----|------|------|------|
-| L1 | `qe.c.getWeekStart()` | 静态无参 | 直接返回 2（周一） |
-| L2 | `qe.c.c(String,int)` | 静态 | key="week" 返回 2（周一） |
-| L3 | `va.d.getInt(String,int)` | 实例 | key="week"/"apiconfu_week" 返回 2（周一） |
-
-> 只 hook 底层 `va.d.getInt` 不够：已登录时走 `va/c.l()` 且启动早期登录检查返回 false 时直接返回默认值，
-> 根本不会到达 getInt。因此必须三重覆盖。
-
-### 写入链（不拦截，数据安全）
-```
-CalendarHubPage.onMenuItemClick
-  → qe.c.setWeekStart(I)Z
-    → qe.c.d("week", I)Z  (登录时写入 apiconfu_week)
-```
-设置写入**真实发生**（MMKV 键值），模块只在**读取**时把值覆盖成周一。
-不影响账单数据库，停用/卸载模块后设置恢复原始行为，完全可逆。
-
 ## 📁 项目结构
+
 ```
 com.hook.qianji.weekstart/
-├── AndroidManifest.xml
-├── build.sh                     # 本地构建脚本 (aapt/smali/zipalign/apksigner)
-├── dev-guide/                   # 🧠 开发指南（技术架构 / 踩坑记录 / 环境信息）
-│   ├── architecture.md          # 读取链、写入链、三重 hook 原理
-│   ├── lessons.md               # Smali 开发踩坑记录（签名 / OR逻辑 / 日志 / 混淆）
-│   └── environment.md           # 目标应用信息 / LSPosed 环境 / 混淆映射表
+├── AndroidManifest.xml            # minSdk=26；api102 无需 xposed meta-data
+├── version.properties             # 版本管理（build.sh 自动递增）
+├── build.sh                       # 构建: smali→aapt→打包(META-INF)→zipalign→apksigner
+├── dev-guide/                      # 🧠 开发指南（技术架构 / 踩坑记录 / 环境信息）
+│   ├── architecture.md            # 逆向分析 & Hook 方案：读取链、写入链、三重 hook 原理
+│   ├── lessons.md                 # Smali 开发踩坑记录（签名 / OR逻辑 / 日志 / 混淆）
+│   ├── environment.md             # 目标应用信息 / LSPosed 环境 / 混淆映射表
+│   ├── api102-migration.md        # api102 重构记录
+│   ├── CHANGELOG.md               # 更新日志
+│   └── legacy-traditional-api/    # 旧版传统 Xposed API 源码备份
+├── res/values/arrays.xml          # 资源（作用域数组，保留兼容）
 ├── src/
-│   ├── assets/xposed_init       # 入口类声明
+│   ├── meta-inf/META-INF/xposed/  # 📌 api102 模块声明
+│   │   ├── java_init.list         # 入口类: com.hook.qianji.weekstart.MainHook
+│   │   ├── module.prop            # minApiVersion=101 / targetApiVersion=102 / staticScope / autoHotReload
+│   │   └── scope.list             # 作用域: com.mutangtech.qianji
 │   └── smali/com/hook/qianji/weekstart/
-│       ├── HookEntry.smali      # 入口：注册三重 hook
-│       ├── HookEntry$1.smali    # L3: va.d.getInt 回调
-│       ├── HookEntry$2.smali    # L2: qe.c.c 回调
-│       └── HookEntry$3.smali    # L1: qe.c.getWeekStart 回调
-└── release/                     # 构建产物
+│       ├── MainHook.smali         # api102 入口 (extends XposedModule) + 生命周期 + 热重载
+│       ├── MainHook$WeekStartHooker.smali  # L1: qe.c.getWeekStart() 回调
+│       ├── MainHook$QeCCHooker.smali       # L2: qe.c.c(String,int) 回调
+│       └── MainHook$GetIntHooker.smali     # L3: va.d.getInt(String,int) 回调
+└── release/                       # 构建产物
 ```
 
 ## 🔧 安装使用
@@ -97,11 +74,15 @@ com.hook.qianji.weekstart/
 
 ## 📜 日志确认
 
+api102 版（v1.1.0+）日志 tag 为 `QianjiWeekStart`：
+
 ```
-钱迹强制周一 v1.0.15: 已加载到钱迹
-钱迹强制周一 v1.0.15: 已注册三重hook(getInt/qe.c.c/getWeekStart)
-钱迹强制周一 v1.0.15: ★拦截getWeekStart→周一(2)   ← 每次读取触发
+QianjiWeekStart: 钱迹强制周一 api102 v1.1.0 loaded              ← onModuleLoaded
+QianjiWeekStart: 三重hook已安装(getWeekStart/qe.c.c/getInt)      ← onPackageReady
 ```
+
+> api102 架构下 Hooker 回调无 log 通道（见 dev-guide/lessons.md C2），
+> 拦截是否命中以界面效果为准（日历页周一起始 = 生效）。
 
 ## 🧱 本地构建（可选）
 
@@ -116,20 +97,9 @@ chmod +x build.sh
 
 ---
 
-## 📖 附言：一段漫长的反馈史
+## 📖 背景
 
-这个 bug 困扰了我大半年，向官方反馈了多次，始终没有修复：
-
-> - **2025.12.30** 第一次向官方反馈
-> - **2026.02.02** 第二次向官方反馈
-> - **2026.08.11** 第三次向官方反馈
-> - 期间还在公众号文章下反馈过几次
->
-> 一直没修复，没处理，没招了。
-> 自己上了。
-
-如果你也深受"周起始日设置不生效"困扰，希望这个模块能帮到你。
-也欢迎通过 Issues / PR 贡献代码。
+这个 bug 困扰了大半年，向官方多次反馈始终未修复（详见 dev-guide/CHANGELOG.md），于是自己动手。
 
 **特别感谢 [LSPosed 团队](https://github.com/LSPosed/LSPosed)** —— 没有这个优秀的框架，就没有这个模块。🙏
 
