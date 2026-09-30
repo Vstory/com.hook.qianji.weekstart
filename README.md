@@ -21,7 +21,7 @@
 | 版本 | 文件 | 说明 |
 |------|------|------|
 | v1.1.0 (20) | `QianjiForceMonday_1.1.0(20).apk` | **api102 重构版**（最新，含模块描述；release/ 内置） |
-| v1.0.15 (17) | `QianjiForceMonday_v1.0.15(17).apk` | 传统 Xposed API 版（旧，仅 GitHub Releases；源码备份于 dev-guide/legacy-traditional-api/） |
+| v1.0.15 (17) | `QianjiForceMonday_v1.0.15(17).apk` | 传统 Xposed API 版（旧，仅 GitHub Releases；源码备份于 dev-project/legacy-traditional-api/） |
 
 ### 🔑 签名策略（FAQ：别人没有我的签名 / 没有 MT Manager 怎么办？）
 
@@ -43,7 +43,7 @@ com.hook.qianji.weekstart/
 ├── AndroidManifest.xml            # minSdk=26；api102 无需 xposed meta-data
 ├── version.properties             # 版本管理（build.sh 自动递增）
 ├── build.sh                       # 构建: smali→aapt→打包(META-INF)→zipalign→apksigner
-├── dev-guide/                      # 🧠 开发指南（技术架构 / 踩坑记录 / 环境信息）
+├── dev-project/                      # 🧠 开发指南（技术架构 / 踩坑记录 / 环境信息）
 │   ├── architecture.md            # 逆向分析 & Hook 方案：读取链、写入链、三重 hook 原理
 │   ├── lessons.md                 # Smali 开发踩坑记录（签名 / OR逻辑 / 日志 / 混淆）
 │   ├── environment.md             # 目标应用信息 / LSPosed 环境 / 混淆映射表
@@ -81,7 +81,7 @@ QianjiWeekStart: 钱迹强制周一 api102 v1.1.0 loaded              ← onModu
 QianjiWeekStart: 三重hook已安装(getWeekStart/qe.c.c/getInt)      ← onPackageReady
 ```
 
-> api102 架构下 Hooker 回调无 log 通道（见 dev-guide/lessons.md C2），
+> api102 架构下 Hooker 回调无 log 通道（见 dev-project/lessons.md C2），
 > 拦截是否命中以界面效果为准（日历页周一起始 = 生效）。
 
 ## 🧱 本地构建（可选）
@@ -99,7 +99,7 @@ chmod +x build.sh
 
 ## 📖 背景
 
-这个 bug 困扰了大半年，向官方多次反馈始终未修复（详见 dev-guide/CHANGELOG.md），于是自己动手。
+这个 bug 困扰了大半年，向官方多次反馈始终未修复（详见 dev-project/CHANGELOG.md），于是自己动手。
 
 **特别感谢 [LSPosed 团队](https://github.com/LSPosed/LSPosed)** —— 没有这个优秀的框架，就没有这个模块。🙏
 

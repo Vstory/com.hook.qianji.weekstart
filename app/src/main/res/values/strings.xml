@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">钱迹强制周一</string>
+    <string name="module_description">强制钱迹记账的每周起始日为周一（三重 hook 覆盖所有 week 读取路径）</string>
+</resources>

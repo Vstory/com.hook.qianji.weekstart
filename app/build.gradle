@@ -1,0 +1,41 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace = 'com.hook.qianji.weekstart'
+    compileSdk = 37
+
+    signingConfigs {
+        create("universal") {
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+            storeFile = file("../debug.keystore")
+            storePassword = "android"
+        }
+    }
+    defaultConfig {
+        applicationId = "com.hook.qianji.weekstart"
+        minSdk = 26
+        targetSdk = 35
+        versionName = "1.1.0"
+        versionCode = 21
+    }
+    buildTypes {
+        all { signingConfig = signingConfigs.getByName("universal") }
+        debug { debuggable = true }
+        release { minifyEnabled = false; debuggable = false }
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    buildFeatures { buildConfig true }
+    lint { checkReleaseBuilds = false }
+}
+
+dependencies {
+    compileOnly(files("libs/libxposed/api.jar"))
+    implementation(files("libs/libxposed/interface.jar"))
+    implementation(files("libs/libxposed/service.jar"))
+}
